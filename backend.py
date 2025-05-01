@@ -15,8 +15,15 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 
 # Connect to MongoDB Atlas
-client = MongoClient(os.getenv('MONGODB_URI'))
-db = client.scouting_db
+try:
+    client = MongoClient(os.getenv('MONGODB_URI'))
+    db = client.scouting_db
+    # Test the connection
+    db.command('ping')
+    print("MongoDB connection successful")
+except Exception as e:
+    print(f"Failed to connect to MongoDB: {str(e)}")
+    raise e
 
 class User(UserMixin):
     def __init__(self, id, email):
@@ -25,36 +32,67 @@ class User(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    user = db.users.find_one({"_id": ObjectId(user_id)})
-    if user:
-        return User(str(user['_id']), user['email'])
-    return None
+    try:
+        user = db.users.find_one({"_id": ObjectId(user_id)})
+        if user:
+            print(f"Loaded user: {user}")
+            return User(str(user['_id']), user['email'])
+        print(f"User not found: {user_id}")
+        return None
+    except Exception as e:
+        print(f"Error loading user {user_id}: {str(e)}")
+        return None
 
 @app.route('/api/register', methods=['POST'])
 def register():
-    data = request.get_json()
-    email = data.get('email')
-    password = data.get('password')
-    if not email or not password:
-        return jsonify({'error': 'Email and password are required'}), 400
-    hashed_password = generate_password_hash(password)
     try:
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+        if not email or not password:
+            return jsonify({'error': 'Email and password are required'}), 400
+
+        existing_user = db.users.find_one({"email": email})
+        if existing_user:
+            return jsonify({'error': 'Email already exists'}), 400
+
+        hashed_password = generate_password_hash(password)
         result = db.users.insert_one({"email": email, "password": hashed_password})
+        print(f"Registered user: {email}, Inserted ID: {result.inserted_id}")
         return jsonify({'message': 'Registered successfully', 'user': {'email': email}}), 201
-    except Exception as e:
+    except pymongo.errors.DuplicateKeyError:
         return jsonify({'error': 'Email already exists'}), 400
+    except Exception as e:
+        print(f"Register error: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/login', methods=['POST'])
 def login():
-    data = request.get_json()
-    email = data.get('email')
-    password = data.get('password')
-    user = db.users.find_one({"email": email})
-    if user and check_password_hash(user['password'], password):
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+        if not email or not password:
+            return jsonify({'error': 'Email and password are required'}), 400
+
+        user = db.users.find_one({"email": email})
+        if not user:
+            return jsonify({'error': 'Invalid credentials'}), 401
+
+        if 'password' not in user:
+            print(f"User data corrupted for {email}: {user}")
+            return jsonify({'error': 'User data corrupted'}), 500
+
+        if not check_password_hash(user['password'], password):
+            return jsonify({'error': 'Invalid credentials'}), 401
+
         user_obj = User(str(user['_id']), user['email'])
         login_user(user_obj, remember=True)
+        print(f"Logged in user: {email}")
         return jsonify({'message': 'Logged in successfully', 'user': {'email': user['email']}})
-    return jsonify({'error': 'Invalid credentials'}), 401
+    except Exception as e:
+        print(f"Login error: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/logout', methods=['POST'])
 @login_required
@@ -64,24 +102,32 @@ def logout():
 
 @app.route('/api/check_access', methods=['GET'])
 def check_access():
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'authenticated': False, 'subscribed': False}), 401
-    subscription = db.subscriptions.find_one({"user_id": user_id})
-    subscribed = subscription['active'] if subscription else False
-    return jsonify({'authenticated': True, 'subscribed': subscribed})
+    try:
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'authenticated': False, 'subscribed': False}), 401
+        subscription = db.subscriptions.find_one({"user_id": user_id})
+        subscribed = subscription['active'] if subscription else False
+        return jsonify({'authenticated': True, 'subscribed': subscribed})
+    except Exception as e:
+        print(f"Check access error: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/subscription/activate', methods=['POST'])
 @login_required
 def activate_subscription():
-    user_id = session.get('user_id')
-    db.subscriptions.update_one(
-        {"user_id": user_id},
-        {"$set": {"user_id": user_id, "active": True}},
-        upsert=True
-    )
-    return jsonify({'message': 'Subscription activated'})
+    try:
+        user_id = session.get('user_id')
+        db.subscriptions.update_one(
+            {"user_id": user_id},
+            {"$set": {"user_id": user_id, "active": True}},
+            upsert=True
+        )
+        return jsonify({'message': 'Subscription activated'})
+    except Exception as e:
+        print(f"Activate subscription error: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
-    port = int(os.getenv('PORT', 5000))  # Use PORT env var, default to 5000 for local testing
+    port = int(os.getenv('PORT', 5000))
     app.run(debug=True, host='0.0.0.0', port=port)
