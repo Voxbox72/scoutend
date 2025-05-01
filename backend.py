@@ -6,6 +6,7 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from pymongo import MongoClient
 from bson.objectid import ObjectId
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key')
@@ -58,16 +59,27 @@ def register():
         if not email or not password:
             return jsonify({'error': 'Email and password are required'}), 400
 
-        existing_user = db.users.find_one({"email": email})
+        @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+        def check_existing():
+            return db.users.find_one({"email": email})
+
+        existing_user = check_existing()
         if existing_user:
             return jsonify({'error': 'Email already exists'}), 400
 
         hashed_password = generate_password_hash(password)
-        result = db.users.insert_one({"email": email, "password": hashed_password})
+        @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+        def insert_user():
+            return db.users.insert_one({"email": email, "password": hashed_password})
+
+        result = insert_user()
         print(f"Registered user: {email}, Inserted ID: {result.inserted_id}")
         return jsonify({'message': 'Registered successfully', 'user': {'email': email}}), 201
     except pymongo.errors.DuplicateKeyError:
         return jsonify({'error': 'Email already exists'}), 400
+    except pymongo.errors.ConnectionError as ce:
+        print(f"MongoDB connection error: {str(ce)}")
+        return jsonify({'error': 'Database connection failed'}), 500
     except Exception as e:
         print(f"Register error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
@@ -81,7 +93,11 @@ def login():
         if not email or not password:
             return jsonify({'error': 'Email and password are required'}), 400
 
-        user = db.users.find_one({"email": email})
+        @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+        def find_user():
+            return db.users.find_one({"email": email})
+
+        user = find_user()
         if not user:
             return jsonify({'error': 'Invalid credentials'}), 401
 
@@ -96,6 +112,9 @@ def login():
         login_user(user_obj, remember=True)
         print(f"Logged in user: {email}")
         return jsonify({'message': 'Logged in successfully', 'user': {'email': user['email']}})
+    except pymongo.errors.ConnectionError as ce:
+        print(f"MongoDB connection error: {str(ce)}")
+        return jsonify({'error': 'Database connection failed'}), 500
     except Exception as e:
         print(f"Login error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
