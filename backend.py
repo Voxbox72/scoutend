@@ -1,4 +1,5 @@
 import os
+import pymongo.errors
 from flask import Flask, request, jsonify, session
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required
 from flask_cors import CORS
@@ -16,7 +17,12 @@ login_manager.init_app(app)
 
 # Connect to MongoDB Atlas
 try:
-    client = MongoClient(os.getenv('MONGODB_URI'))
+    client = MongoClient(
+        os.getenv('MONGODB_URI'),
+        serverSelectionTimeoutMS=30000,
+        connectTimeoutMS=10000,
+        socketTimeoutMS=30000
+    )
     db = client.scouting_db
     # Test the connection
     db.command('ping')
