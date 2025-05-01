@@ -1,4 +1,5 @@
 import os
+import logging
 import pymongo.errors
 from flask import Flask, request, jsonify, session
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required
@@ -7,6 +8,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from tenacity import retry, stop_after_attempt, wait_fixed
+
+# Set up Flask logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key')
@@ -27,9 +32,9 @@ try:
     db = client.scouting_db
     # Test the connection
     db.command('ping')
-    print("MongoDB connection successful")
+    logger.info("MongoDB connection successful")
 except Exception as e:
-    print(f"Failed to connect to MongoDB: {str(e)}")
+    logger.error(f"Failed to connect to MongoDB: {str(e)}")
     raise e
 
 class User(UserMixin):
@@ -42,12 +47,12 @@ def load_user(user_id):
     try:
         user = db.users.find_one({"_id": ObjectId(user_id)})
         if user:
-            print(f"Loaded user: {user}")
+            logger.info(f"Loaded user: {user}")
             return User(str(user['_id']), user['email'])
-        print(f"User not found: {user_id}")
+        logger.info(f"User not found: {user_id}")
         return None
     except Exception as e:
-        print(f"Error loading user {user_id}: {str(e)}")
+        logger.error(f"Error loading user {user_id}: {str(e)}")
         return None
 
 @app.route('/api/register', methods=['POST'])
@@ -64,6 +69,7 @@ def register():
             return db.users.find_one({"email": email})
 
         existing_user = check_existing()
+        logger.info(f"Checked for existing user {email}: {existing_user}")
         if existing_user:
             return jsonify({'error': 'Email already exists'}), 400
 
@@ -73,15 +79,19 @@ def register():
             return db.users.insert_one({"email": email, "password": hashed_password})
 
         result = insert_user()
-        print(f"Registered user: {email}, Inserted ID: {result.inserted_id}")
+        logger.info(f"Registered user: {email}, Inserted ID: {result.inserted_id}")
         return jsonify({'message': 'Registered successfully', 'user': {'email': email}}), 201
     except pymongo.errors.DuplicateKeyError:
+        logger.error(f"Duplicate key error for email: {email}")
         return jsonify({'error': 'Email already exists'}), 400
+    except pymongo.errors.ServerSelectionTimeoutError as sste:
+        logger.error(f"Server selection timeout: {str(sste)}")
+        return jsonify({'error': 'Database connection failed - server selection timeout'}), 500
     except pymongo.errors.ConnectionError as ce:
-        print(f"MongoDB connection error: {str(ce)}")
+        logger.error(f"MongoDB connection error: {str(ce)}")
         return jsonify({'error': 'Database connection failed'}), 500
     except Exception as e:
-        print(f"Register error: {str(e)}")
+        logger.error(f"Register error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/login', methods=['POST'])
@@ -98,11 +108,12 @@ def login():
             return db.users.find_one({"email": email})
 
         user = find_user()
+        logger.info(f"Checked for user {email}: {user}")
         if not user:
             return jsonify({'error': 'Invalid credentials'}), 401
 
         if 'password' not in user:
-            print(f"User data corrupted for {email}: {user}")
+            logger.error(f"User data corrupted for {email}: {user}")
             return jsonify({'error': 'User data corrupted'}), 500
 
         if not check_password_hash(user['password'], password):
@@ -110,13 +121,16 @@ def login():
 
         user_obj = User(str(user['_id']), user['email'])
         login_user(user_obj, remember=True)
-        print(f"Logged in user: {email}")
+        logger.info(f"Logged in user: {email}")
         return jsonify({'message': 'Logged in successfully', 'user': {'email': user['email']}})
+    except pymongo.errors.ServerSelectionTimeoutError as sste:
+        logger.error(f"Server selection timeout: {str(sste)}")
+        return jsonify({'error': 'Database connection failed - server selection timeout'}), 500
     except pymongo.errors.ConnectionError as ce:
-        print(f"MongoDB connection error: {str(ce)}")
+        logger.error(f"MongoDB connection error: {str(ce)}")
         return jsonify({'error': 'Database connection failed'}), 500
     except Exception as e:
-        print(f"Login error: {str(e)}")
+        logger.error(f"Login error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/logout', methods=['POST'])
@@ -135,7 +149,7 @@ def check_access():
         subscribed = subscription['active'] if subscription else False
         return jsonify({'authenticated': True, 'subscribed': subscribed})
     except Exception as e:
-        print(f"Check access error: {str(e)}")
+        logger.error(f"Check access error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/subscription/activate', methods=['POST'])
@@ -150,7 +164,7 @@ def activate_subscription():
         )
         return jsonify({'message': 'Subscription activated'})
     except Exception as e:
-        print(f"Activate subscription error: {str(e)}")
+        logger.error(f"Activate subscription error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
