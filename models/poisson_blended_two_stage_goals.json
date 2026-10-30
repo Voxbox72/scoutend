@@ -1,0 +1,80 @@
+{
+  "name": "poisson_blended_two_stage_goals",
+  "target": "y_gls_next",
+  "description": "Ship candidate. Poisson per-90 rate blended toward the position's shrunk rate by minutes played, multiplied by a Gamma expected-minutes model.",
+  "trained_on": [
+    2020,
+    2021,
+    2022
+  ],
+  "evaluated_on": [
+    2021,
+    2022,
+    2023
+  ],
+  "features": [
+    "age",
+    "age_squared",
+    "minutes",
+    "matches",
+    "starts",
+    "start_share",
+    "gls_per90",
+    "npxg_per90",
+    "xg_per90",
+    "ast_per90",
+    "xag_per90",
+    "xa_per90",
+    "sca_per90",
+    "gca_per90",
+    "shots_per90",
+    "sot_per90",
+    "passes_completed_per90",
+    "prg_passes_per90",
+    "prg_carries_per90",
+    "prg_receives_per90",
+    "touches_att_pen_per90",
+    "take_ons_won_per90",
+    "tackles_per90",
+    "interceptions_per90",
+    "clearances_per90",
+    "blocks_per90",
+    "shot_accuracy",
+    "pass_completion",
+    "gls_per90_shrunk",
+    "npxg_per90_shrunk",
+    "ast_per90_shrunk",
+    "gls_per90_prev",
+    "npxg_per90_prev",
+    "minutes_prev"
+  ],
+  "hyperparameters": {
+    "alpha": 1.0
+  },
+  "metrics": {
+    "mae": 1.8061420147650549,
+    "rmse": 2.8584394616771642,
+    "r2": 0.4538718766937156,
+    "spearman": 0.5946932973066752,
+    "top20_overlap": 0.41603731175545067
+  },
+  "baselines_beaten": [
+    "poisson_blended_x_actual_minutes",
+    "poisson_two_stage",
+    "poisson_rate_x_actual_minutes",
+    "last_season_npxg",
+    "ridge",
+    "rate_x_actual_minutes",
+    "last_season_gls",
+    "position_mean",
+    "season_mean"
+  ],
+  "known_limitations": [
+    "Big-5 only; no cross-league strength adjustment yet.",
+    "Training window ends at season 2023; 2024/25 and 2025/26 are not ingested.",
+    "Totals ignore penalties taken and opposition quality."
+  ],
+  "created_at": "2026-10-30T21:28:57+00:00",
+  "python": "3.11.1",
+  "version": "0.3.0"
+}

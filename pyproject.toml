@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scoutend"
+version = "1.0.0"
+description = "Football scouting and next-season performance projection for the Big 5 leagues."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "ScoutEnd" }]
+
+# Core runtime deps. Data, targets, features and the Poisson rate model run on
+# just these; scikit-learn adds the Gamma minutes model and the Ridge reference.
+dependencies = [
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "scikit-learn>=1.4",
+]
+
+[project.optional-dependencies]
+# Parquet output for the per-row evaluation predictions.
+parquet = [
+    "pyarrow>=15.0",
+]
+# The Streamlit scouting interface.
+app = [
+    "streamlit>=1.30",
+    "plotly>=5.20",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+scoutend = "scoutend.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+

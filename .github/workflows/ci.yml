@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy scikit-learn pyarrow
+
+      - name: Lint the interface
+        run: |
+          pip install streamlit plotly
+          python -m py_compile app.py
+
+      - name: Build the dataset and targets
+        run: python run.py build
+
+      - name: Run the test suite
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: Evaluate every candidate against the baselines
+        run: python run.py eval
+
+      - name: Build the projection
+        run: python run.py train
+
+      - name: Upload the evaluation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation
+          path: |
+            data/processed/eval_summary.csv
+            data/processed/eval_report.md
+            data/processed/eval_calibration.csv
+            models/*.json
+            models/*.md

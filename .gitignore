@@ -1,0 +1,32 @@
+﻿# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.venv-*/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# --- Generated data ---
+# data/processed is fully reproducible from Project Data/ (committed) by
+# `python run.py build`, so only the derivation is versioned, not the output.
+data/
+
+# FBref exports that the new pipeline no longer reads. Kept on disk for the
+# historical notebooks; ignored so the repository stays small.
+Project Data/Ready_data/
+
+# --- Audits ---
+audit/notebooks/
+
+# --- Notebooks ---
+.ipynb_checkpoints/
+
+# --- OS / editors ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

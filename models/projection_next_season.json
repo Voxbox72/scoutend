@@ -1,0 +1,68 @@
+{
+  "name": "projection_next_season",
+  "target": "y_gls_next, y_ast_next",
+  "description": "Poisson per-90 rate models multiplied by an expected-minutes model. Projects the season after the last one in the dataset.",
+  "trained_on": [
+    2020,
+    2021,
+    2022,
+    2023
+  ],
+  "evaluated_on": [
+    2021,
+    2022,
+    2023
+  ],
+  "features": [
+    "age",
+    "age_squared",
+    "minutes",
+    "matches",
+    "starts",
+    "start_share",
+    "gls_per90",
+    "npxg_per90",
+    "xg_per90",
+    "ast_per90",
+    "xag_per90",
+    "xa_per90",
+    "sca_per90",
+    "gca_per90",
+    "shots_per90",
+    "sot_per90",
+    "passes_completed_per90",
+    "prg_passes_per90",
+    "prg_carries_per90",
+    "prg_receives_per90",
+    "touches_att_pen_per90",
+    "take_ons_won_per90",
+    "tackles_per90",
+    "interceptions_per90",
+    "clearances_per90",
+    "blocks_per90",
+    "shot_accuracy",
+    "pass_completion",
+    "gls_per90_shrunk",
+    "npxg_per90_shrunk",
+    "ast_per90_shrunk",
+    "gls_per90_prev",
+    "npxg_per90_prev",
+    "minutes_prev"
+  ],
+  "hyperparameters": {
+    "alpha_rate": 1.0,
+    "alpha_minutes": 10.0,
+    "shrinkage_prior_90s": 10.0
+  },
+  "metrics": {},
+  "baselines_beaten": [],
+  "known_limitations": [
+    "Projects season 2024 -> 2025; no outcome data exists yet, so the projection itself cannot be scored.",
+    "2508 players projected; rate models are fitted on players with >= 450 minutes, so low-minute players are extrapolations guarded by shrinkage.",
+    "No league-strength adjustment: a Ligue 1 rate is not corrected toward the Premier League.",
+    "No uncertainty interval yet; see the roadmap (bootstrap or Bayesian)."
+  ],
+  "created_at": "2026-10-30T22:23:23+00:00",
+  "python": "3.11.1",
+  "version": "0.3.0"
+}
