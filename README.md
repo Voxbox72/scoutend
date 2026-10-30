@@ -7,7 +7,7 @@ minutes**, and turns it into a scouting shortlist and player profiles.
 
 **Two versions:**
 
-- **v1.0 — graduation project (2025).** The original pipeline: FBref collection,
+- **v1.0 — graduation project (2024–25).** The original pipeline: FBref collection,
   cleaning, feature engineering and ensemble models. Accepted, and the source of
   the dataset this repository is built on. Preserved unmodified in
   [notebooks/](notebooks/).

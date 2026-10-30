@@ -1,8 +1,8 @@
 # ScoutEnd — Case Study
 
-Two versions of the same project, five years apart:
+Two versions of the same project, two years apart:
 
-| | **v1.0** — graduation project (2025) | **v2.0** — this repository |
+| | **v1.0** — graduation project (2024–25) | **v2.0** — this repository (2026) |
 |---|---|---|
 | Goal | Can scouting reports and next-season output be modelled from public data? | Make that model trustworthy, reproducible and usable |
 | Scope | Big 5 leagues, outfield players, goals and assists | Same data, rebuilt end to end |
