@@ -151,17 +151,23 @@ that ignores defensive contribution and price.
 
 Full list: [docs/CASE_STUDY.md](docs/CASE_STUDY.md) §6.
 
-## Roadmap
+## What each version delivered
 
-- [x] v1.0: data collection, cleaning, feature engineering, ensemble models
-- [x] v2.0: canonical schema, target table, forward-split evaluation
-- [x] v2.0: expected-minutes model, Poisson/Gamma rate models
-- [x] v2.0: scouting layer — percentiles, role clustering, similarity, shortlists
-- [x] v2.0: Streamlit interface, tests, CI, model cards
-- [ ] live data source (Understat or a licensed feed) and fresh seasons
-- [ ] uncertainty intervals on projections
-- [ ] selling-league coverage + cross-league strength adjustment
-- [ ] goalkeepers, as their own modelling problem
+**v1.0 — graduation project**
+
+- FBref data collection across nine stat tables and five seasons
+- Cleaning and position splits into one table per season
+- Feature engineering and ensemble models (Random Forest, XGBoost, LightGBM)
+- Next-season goal and assist projection
+
+**v2.0 — this repository**
+
+- Canonical schema: one row per player-season, transfers merged, 123 columns
+- A target table joined on `season + 1`, asserted, with `left_dataset` flags
+- Forward-split evaluation: 5 baselines, 9 metrics, calibration by decile
+- Expected-minutes model and Poisson/Gamma rate models, composed as rate × minutes
+- Scouting layer: percentiles, role clusters, similarity, shortlist scoring
+- Streamlit interface, 47 tests, CI, and a model card for every shipping model
 
 ## Data
 
