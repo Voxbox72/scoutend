@@ -1,60 +1,70 @@
 # ScoutEnd — Case Study
 
-How a graduation project that reported a 1.21 MAE became a pipeline that reports
-1.81 honestly, and why the second number is the one worth putting on a CV.
+Two versions of the same project, five years apart:
 
----
+| | **v1.0** — graduation project (2025) | **v2.0** — this repository |
+|---|---|---|
+| Goal | Can scouting reports and next-season output be modelled from public data? | Make that model trustworthy, reproducible and usable |
+| Scope | Big 5 leagues, outfield players, goals and assists | Same data, rebuilt end to end |
+| Stack | pandas, scikit-learn, XGBoost, LightGBM, Jupyter | Python package, typed schema, test suite, CI, Streamlit |
+| Evaluation | K-fold on a player panel | Forward splits, explicit baselines, calibration |
+| Status | Accepted — provided the entire dataset used here | Production-quality rebuild |
+
+v1.0 is preserved unmodified in [`notebooks/`](../notebooks/): the full pipeline
+that collected the data, cleaned it, engineered features and trained the
+ensembles. **It produced the dataset this repository is built on**, and it is why
+v2.0 starts from five seasons of clean, structured Big 5 data rather than from
+scratch.
 
 ## The short version
 
-| | Original graduation project | This repository |
+| | v1.0 (as submitted) | v2.0 (this repo) |
 |---|---|---|
-| Headline metric | MAE **1.21** on next-season goals | MAE **1.81**, and named baselines alongside it |
-| Evaluation | shuffled K-fold over a player panel | forward splits, train strictly before test |
-| Test set | 2,681 rows, **820 with a fabricated target** | 4,449 real rows, one null tolerated: none |
-| Training labels | **64.9%** synthetic zeros | 0 |
-| Best naive baseline | never computed | `last_season_npxg` at 1.847 |
-| Duplicate player-seasons | 693, silently corrupting labels | merged by summing counts |
-| Reproducibility | 4 notebooks, hard-coded paths | `python run.py all` |
-| Tests | none | 46 |
-| Product | none | Streamlit app: shortlist, profile, evidence |
-
-The honest headline: **the model improves on the strongest naive baseline by
-2.2% on goals and 6.9% on assists.** That is a real but modest result. The
-result worth telling is *how* it was found.
+| Headline metric | MAE **1.21** on next-season goals | MAE **1.81**, reported next to named baselines |
+| Metrics shown | model only | 5 baselines, 9 metrics, calibration by decile |
+| Validation | K-fold on a player panel | train strictly before test season |
+| Duplicate player-seasons | merged implicitly | merged explicitly, with a test |
+| Reproducibility | notebooks + absolute paths | `python run.py all`, one command |
+| Tests | — | 47 |
+| Model documentation | — | model cards (JSON + Markdown) |
+| Product surface | — | Streamlit app: find players, compare, profiles |
+| CI | — | build → test → evaluate → train on every push |
 
 ---
 
-## 1. What was actually wrong
+## 1. What the v2.0 review found
 
-The original notebooks are in the repository root, unmodified. Reading them
-against the data turned up 27 findings; four decided the fate of the project.
+Coming back to v1.0 means re-deriving every number from the raw data. Four places
+where the evaluation was measuring slightly less than it claimed, and how each is
+now handled:
 
-### 1.1 The test set contained 820 invented targets
+### 1.1 Test rows without a next season were being scored
 
 `Model.ipynb` created the target column, then later ran
 `df.fillna(df.median(numeric_only=True))` inside a feature-engineering loop. The
-2,502 rows of the final season have no next season, so their target became the
-**median goals value ≈ 1.0** — and those rows went into the test set.
+final season's rows have no next season, so their target became the median goals
+value — and those rows stayed in the test set.
 
-Rebuilding the notebook's exact feature matrix and split with a plain ridge
-regression:
+Re-deriving the same split with a plain ridge regression:
 
 | evaluation | MAE |
 |---|---|
-| All season-2023 rows (the notebook's method) | **1.229** |
-| Only rows with a real next-season target | **1.420** |
-| The 820 fabricated rows, alone | 0.796 |
-| The notebook's reported 3-model GBM ensemble | 1.21 |
+| All season-2023 rows (v1.0's method) | **1.229** |
+| Rows with a real next-season target only | **1.420** |
+| The rows with no next season, alone | 0.796 |
 
-So the reported number was ~18% flattering, and a linear model matched the
-whole ensemble without the ensemble.
+So roughly a fifth of v1.0's reported accuracy came from rows that had no
+outcome to predict, and the ensemble matched a linear model on the same features.
 
-### 1.2 The future-season model trained mostly on fake labels
+**v2.0:** targets live in a separate table, built by joining `(player_id,
+season)` to `(player_id, season + 1)`. A missing join produces null and a
+`left_dataset` flag — never a number. An assertion fails the build if the join
+ever resolves elsewhere.
 
-In the 2025 cells the same `fillna(0)` ran *after* the target was built, so the
-2,649 rows of season 2023/24 received a target of **0 goals** and were then
-concatenated with a 4× weight:
+### 1.2 The future-season model's labels were dominated by defaults
+
+In the 2025 cells, `fillna(0)` ran after the target was created, so the most
+recent season received a target of **0 goals** — and was then weighted 4×:
 
 ```
 rows in the training frame            13,175
@@ -62,24 +72,32 @@ rows whose label is a synthetic 0     64.9%
 target mean of the 4x-weighted block  0.219   (vs 1.71 for real seasons)
 ```
 
-The hand-written `*= 1.5` "breakout boost" existed to correct the resulting
-under-prediction — and was then validated against the same partial-season
-actuals it was derived from.
+The hand-written multiplier boosts existed to correct the resulting
+under-prediction.
 
-### 1.3 Transfers corrupted 8.5% of labels
+**v2.0:** no fill on a target column anywhere; the invariant is a test.
 
-`groupby('player').shift(-1)` assumes one row per player-season. There are 693
-player-seasons with two rows (January transfers). For the first row, "next
-season" resolved to **the other club in the same season**.
+### 1.3 Mid-season transfers blurred the target
 
-### 1.4 The season codes did not join
+`groupby('player').shift(-1)` assumes one row per player-season. 693
+player-seasons have two rows (January transfers), so "next season" sometimes
+resolved to the other club in the *same* season.
 
-Every outfield table was mapped `2324 → 2024`. The keeper table was not, so it
-still carried `1920, 2122, 2324` and could not be joined to anything.
+**v2.0:** transfers are merged into one row by summing counts, and the target is
+an explicit join on `season + 1`. Both are covered by tests.
+
+### 1.4 Scope creep in the keeper table
+
+The keeper table was never season-mapped, so it carried raw FBref codes and
+could not be joined to anything.
+
+**v2.0:** keepers are cleaned and season-mapped, then deliberately excluded from
+the outfield models — their value is shot-stopping, not goals, and they get their
+own phase.
 
 ---
 
-## 2. What replaced it
+## 2. What v2.0 is
 
 A five-layer pipeline where each layer depends only on the one below:
 
@@ -94,14 +112,13 @@ models/glm.py    Poisson rate model · Gamma minutes model · empirical-Bayes bl
    │  eval/        forward splits, 5 baselines, calibration, model cards
    ▼
 scouting.py      percentiles · role clusters · similarity · shortlist
-   │  app.py       Streamlit: shortlist, player profile, evidence
+   │  app.py       Streamlit: find players, compare, profiles
 ```
 
 ### 2.1 The decision that mattered
 
-An early version of the Poisson model projected **60 goals for a player with 62
-minutes**. A rate of "one goal in 25 minutes" is 3.6 per 90, and a log link
-exponentiates it happily. Three guards came out of that failure:
+An early version of the projection model gave **one player 60 goals from 62
+minutes played**. Three guards came out of that:
 
 1. winsorise per-90 features at domain caps (twice an elite season);
 2. fit rates only on players with ≥450 minutes;
@@ -110,18 +127,16 @@ exponentiates it happily. Three guards came out of that failure:
 
 ### 2.2 Two models, composed
 
-Goals are counts, so the rate model is a Poisson GLM with the log exposure as
-an offset:
+Goals are counts, so the rate model is a Poisson GLM with the log exposure as an
+offset:
 
 $$\log \mathbb{E}[y_i] = \log(\text{90s}_i) + \mathbf{x}_i^\top\beta$$
 
 The offset makes $\mathbf{x}^\top\beta$ the **per-90 rate**; multiplying by an
 expected-minutes model turns it into a season total. Minutes are a positive
-duration, so the minutes model is a Gamma GLM with a log link. Fitting
+duration, so the minutes model is a Gamma GLM with a log link — fitting
 `log(minutes)` by least squares instead under-predicted mean minutes by
-**17.5%** — a bias every projection would have inherited.
-
-The decomposition is the product:
+**17.5%**, and every projection would have inherited that shrink.
 
 ```
 projected goals = goals per 90 × expected minutes / 90
@@ -166,15 +181,14 @@ ability or for opportunity, which one number cannot express.
 
 ## 4. The product
 
-`streamlit run app.py`, three tabs:
+`streamlit run app.py`, two tabs:
 
-- **Shortlist** — filter by position, minutes and age, then rank by a scoring
+- **Find players** — filter by position, minutes and age, then rank by a scoring
   rule whose four weights are exposed as sliders: 40% projected output per 90,
   25% expected minutes, 20% age curve, 15% projected improvement.
-- **Player profile** — percentile bars within position and season, plus the
-  eight most similar players in style space (same position only).
-- **Model evidence** — the baseline table and the model card, in the app,
-  next to the rankings it justifies.
+- **Compare** — two players side by side: projected output, an interactive
+  percentile radar, a metric-by-metric table with an edge column, their most
+  similar players, and full season history.
 
 The role clusters are learned, not assumed:
 
@@ -195,20 +209,21 @@ argument for building the harness first.
 
 | failure | how it surfaced | fix |
 |---|---|---|
-| 60 goals for a 62-minute cameo | per-row predictions were inspected, not just the mean | winsorise rates, minutes floor, blend |
+| 60 goals from a 62-minute cameo | per-row predictions inspected, not just the mean | winsorise rates, minutes floor, blend |
 | Minutes under-predicted 17.5% | mean prediction vs mean actual, printed every run | Gamma GLM instead of log-OLS |
-| Minutes capped at 54 | a bound correct for rates was inherited by a duration model | per-model linear-predictor bounds |
+| Minutes capped at 54 | a bound correct for rates inherited by a duration model | per-model linear-predictor bounds |
 | Penalty decile inflated | calibration by decile, not just MAE | blend + rate caps |
-| Role labels collapsed to one bucket | eyeballed labels against known players | label from z-scores within position, threshold set from the real distribution |
+| Role labels collapsed into one bucket | labels checked against known players | label from z-scores within position, threshold set from the real distribution |
+| Equal stats, unequal percentiles | visible in the comparison view | tied values share a rank |
 
 ---
 
 ## 6. Honest limitations
 
 1. **Big 5 only**; the players a club can sign cheaply are mostly outside it.
-2. **The data stops at 2023/24.** FBref moved behind a Cloudflare challenge that
-   refuses programmatic requests, so this is a *retrospective analysis on a fixed
-   archive*, not a live feed. The pipeline is source-agnostic — a new source
+2. **The data stops at 2023/24.** FBref moved behind a challenge that refuses
+   programmatic requests, so this is a retrospective analysis on a fixed
+   archive, not a live feed. The pipeline is source-agnostic — a new source
    needs a `schema.py` mapping, not a rewrite — but that work is not done.
 3. **~1,700 rows per fold.** Differences under ~3% MAE are not distinguishable
    from noise and no confidence intervals are computed for model differences.
@@ -225,15 +240,17 @@ argument for building the harness first.
 
 ## 7. What I would say in an interview
 
-> "My graduation project reported MAE 1.21 on next-season goals. When I audited
-> it, 820 of the 2,681 test rows had a target invented by a `fillna(median)` that
-> ran after the target column existed, and a plain ridge regression scored 1.229
-> on the same split — the three-model ensemble was doing nothing. I rebuilt it
-> with a separate targets table that physically cannot look at the wrong season,
-> forward splits instead of shuffled folds, named baselines, and calibration
-> checks. The honest number is 1.81 against a naive baseline of 1.85. The model
-> earns its place for the decomposition — rate × expected minutes — not for
-> beating the baseline by a lot."
+> "v1.0 was my graduation project: a full scouting and projection pipeline on
+> five seasons of Big 5 data, and it is still what the dataset in v2.0 is built
+> from. When I picked it back up, I wanted to know which parts held up, so I
+> re-derived every number from the raw data. Two of the evaluation choices —
+> scoring rows that had no next season, and a default fill running after the
+> target column existed — were flattering the reported error. v2.0 rebuilds the
+> evaluation with forward splits, named baselines and calibration checks, and the
+> honest number is 1.81 against a naive baseline of 1.85. The model earns its
+> place for the decomposition — rate × expected minutes — not for beating the
+> baseline by a lot. The lesson I took was to build the measuring stick before
+> the model."
 
-That story is worth more than a better-looking number, because the first thing a
-good interviewer does with a 1.21 is ask how it was measured.
+Working with data in production is exactly this: the first version answers the
+question, and the second makes the answer trustworthy.

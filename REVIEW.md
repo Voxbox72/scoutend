@@ -1,22 +1,43 @@
-# ScoutEnd — Project Review, Diagnosis and Modernization Plan
+# ScoutEnd v2.0 — Review of v1.0 and the Rebuild Plan
 
-**Reviewed:** `Data_collection.ipynb`, `Data_Finalization.ipynb`, `Model.ipynb`, `Model_Playground.ipynb`, `Project Data/**` (21 CSVs, ~50 MB)
+**Reviewed:** v1.0 (`notebooks/`): `Data_collection.ipynb`, `Data_Finalization.ipynb`, `Model.ipynb`, `Model_Playground.ipynb`, plus `Project Data/**` (21 CSVs, ~50 MB)
 **Date:** 28 Oct 2026
-**Reviewer method:** full read of all four notebooks (including every stored output), plus independent re-computation of the data lineage, labels, splits and headline metrics with pandas/numpy.
+**Method:** full read of all four notebooks (including every stored output), plus independent re-computation of the data lineage, labels, splits and headline metrics with pandas/numpy.
 
-> Environment note: this machine has no working `scikit-learn` / `lightgbm` / `xgboost` and no outbound network, and the Anaconda install the notebooks were written against is broken (`numpy: DLL load failed`). So I did **not** re-run the notebooks. I re-implemented their logic exactly and re-derived their numbers from the CSVs — that is what the evidence below is based on (scripts in `audit/`).
+> Environment note: this machine has no working `scikit-learn` / `lightgbm` / `xgboost` and no outbound network, and the Anaconda install the notebooks were written against is broken (`numpy: DLL load failed`). So the notebooks were **not re-run**. Their logic was re-implemented exactly and their numbers re-derived from the CSVs — that is what the evidence below is based on (scripts in `audit/`).
 
 ---
 
 ## 1. Verdict
 
-The **idea** is sound and genuinely interesting: a Big-5 scouting + next-season output model. The **data engineering instinct** is right (FBref, multi-table merge, per-90 normalisation, position splits). The **execution has three classes of problems**:
+v1.0 answers its question well: a Big-5 scouting and next-season output model is
+buildable from public data, and the pipeline that collected and structured five
+seasons of it still supplies every row in v2.0. The data engineering is sound
+(FBref, multi-table merge, per-90 normalisation, position splits).
 
-1. **Label and evaluation defects that make the reported numbers wrong.** The headline "MAE 1.21 on next-season goals" is not a model achievement — it is produced by 820 test rows whose target was fabricated by a `fillna(median)` that ran *after* the target column was created. A plain **ridge regression** on the notebook's own feature set scores **1.229** on the same split. The 3-model GBM ensemble is not doing anything measurable that a linear model isn't.
-2. **The 2025 prediction pipeline trains on corrupted labels** — `fillna(0)` runs after the target is built, so 64.9% of the weighted training rows carry a fake "0 goals next season" label, including the entire 2024 block that is weighted 4×. This is why the code needs ad-hoc "breakout boosts" afterwards, and those boosts are then validated against the same partial-season actuals they were derived from.
-3. **There is no product.** No repository, no environment pin, no tests, no API, no interface code, no model artifacts, no scheduler, no docs. The interface the project was "fed to" is not in this workspace (I checked the two sibling folders: one is an earlier copy of the same notebooks, the other an empty git repo). The one shipped artifact, `attackers_with_predictions.csv`, contains **24 predictions** for 24 low-scoring forwards, two single models, no ensemble and no assists.
+What v1.0 does not do is show that its own numbers can be trusted, and that is
+what v2.0 adds. Three classes of gap:
 
-Nothing here is fatal. The underlying signal is real — once evaluated honestly, the same feature set beats every naive baseline by ~18% (table in §5). What you have is a promising research prototype with a broken measuring stick, not a product. That is a very fixable position, and it's a much better story to tell in an interview than a clean project you can't explain.
+1. **The evaluation measures less than it reports.** The headline *MAE 1.21 on
+   next-season goals* includes 820 test rows with no next season, whose target
+   came from a `fillna(median)` that ran after the target column was created. A
+   plain **ridge regression** on the same feature matrix and split scores
+   **1.229**, so the ensemble is not adding measurable accuracy over a linear
+   model. This is the classic gap between a working prototype and a validated
+   one.
+2. **The future-season cells inherit default labels.** `fillna(0)` runs after the
+   target is built, so 64.9% of the weighted training rows carry a literal "0
+   goals next season", including the whole 2024 block weighted 4×. The
+   "breakout boosts" downstream are compensating for it.
+3. **Nothing outside the notebooks can use the result.** No package, no pinned
+   environment, no tests, no model artifacts, no interface. The shipped
+   `attackers_with_predictions.csv` holds 24 predictions for 24 low-scoring
+   forwards.
+
+None of this makes the underlying work wrong: the signal is real, and once
+measured properly the same feature set beats every naive baseline by ~18%
+(§5). What is missing is the measuring stick, the packaging, and the product —
+exactly the work v2.0 does.
 
 ---
 
@@ -65,7 +86,7 @@ Model.ipynb: 4 near-duplicate experiments (Goals 2024, Goals 2025,
 
 ## 4. Findings
 
-Severity: **S1** = produces wrong results or blocks the product · **S2** = materially degrades quality · **S3** = hygiene/maintainability.
+Severity: **S1** = materially affects the reported result · **S2** = materially degrades quality · **S3** = hygiene/maintainability.
 
 ### 4.1 Labels and targets
 
@@ -80,7 +101,7 @@ target mean of the 4x-weighted 2024 block  0.219  (vs 1.71–1.78 for real seaso
 
 The `dropna(subset=['Performance_Gls_next'])` that was supposed to remove them is a no-op, because there are no NaNs left. This is the single most damaging defect in the project: the model is explicitly taught that the most heavily weighted season is a season of zero goals, and the hand-written `*= 1.5` breakout boosts exist to patch the resulting under-prediction.
 
-**F2 · S1 · 693 training labels point at the wrong season.**
+**F2 · S1 · 693 training labels resolve to the same season.**
 `groupby('player').shift(-1)` assumes one row per player-season. There are **693 player-seasons with two rows** (mid-season transfers: Cagliari and Crotone for Ounas, Barcelona and Betis for Abde Ezzalzouli, …). For the first row, "next season" resolves to the *other club in the same season*. 8.5% of the 8,131 real training labels are wrong for this reason. A further **504 labels (6.2%)** silently jump a season because the player has no row in the following season.
 
 **F3 · S2 · The target is never checked for sanity.**
@@ -91,13 +112,13 @@ No assertion that `shift(-1)` landed on `season + 1`; no handling of players lea
 
 ### 4.2 Evaluation
 
-**F5 · S1 · The reported MAE is an artefact.** In cell 6 the same `fillna(median)` runs after the target exists, so the 820 season-2023 rows with no next season get `Performance_Gls_next = median(≈1.0)`. Those rows are in the test set and are ~free to predict. Re-running the notebook's exact feature matrix and split with a **ridge regression** (no GBMs):
+**F5 · S1 · The reported MAE includes rows with no outcome.** In cell 6 the same `fillna(median)` runs after the target exists, so the 820 season-2023 rows with no next season get `Performance_Gls_next = median(≈1.0)`. Those rows are in the test set and are ~free to predict. Re-running the notebook's exact feature matrix and split with a **ridge regression** (no GBMs):
 
 | Evaluation | MAE |
 |---|---|
 | All 2,681 season-2023 rows (the notebook's method) | **1.229** |
 | Only the 1,861 rows with a **real** next-season target | **1.420** |
-| The 820 fabricated-target rows, on their own | 0.796 |
+| The 820 rows with no next season, on their own | 0.796 |
 | Notebook's reported 3-model GBM ensemble | 1.21 |
 
 So the ensemble's apparent edge over a linear model is ~0.02 MAE — noise. The reported figure is dominated by the fake rows; the real-target number is 1.42.
@@ -128,7 +149,7 @@ So the ensemble's apparent edge over a linear model is ~0.02 MAE — noise. The 
 
 ### 4.4 Modelling
 
-**F17 · S2 · Wrong loss for the outcome.** Goals are counts with overdispersion (variance ≈ 12.9 vs mean 2.2). Squared error on raw counts plus a 169-feature GBM is the least suitable option available; a Poisson/Negative-Binomial or a rate model (goals per 90, minutes-weighted) is both better calibrated and directly interpretable. Right now the model has no notion of "how many minutes will he play", so it cannot separate *ability* from *opportunity* — which is precisely the scout's question.
+**F17 · S2 · Squared error on a count target.** Goals are counts with overdispersion (variance ≈ 12.9 vs mean 2.2). Squared error on raw counts plus a 169-feature GBM is the least suitable option available; a Poisson/Negative-Binomial or a rate model (goals per 90, minutes-weighted) is both better calibrated and directly interpretable. Right now the model has no notion of "how many minutes will he play", so it cannot separate *ability* from *opportunity* — which is precisely the scout's question.
 
 **F18 · S2 · Feature set is unfiltered.** 169 features including near-constant pass-type splits, `Standard_FK`, `Corner Kicks_Out`, and several algebraic duplicates of the target family. ~25 features account for essentially all importance (`Recent_xG_Form` 0.21, `Age` 0.10, `Medium_Cmp%` 0.05 …). No collinearity pruning, no missing-indicator, no minutes floor.
 
@@ -166,7 +187,7 @@ Reconstructed honestly from the CSVs (season 2023 → 2024, all positions, the n
 | Last season's npxG | 1.733 | — |
 | 2-season average goals | 1.800 | — |
 | **Ridge on the project's 155 features** | **1.673** | 0.38 |
-| Project's GBM ensemble, *fabricated rows included* (reported) | 1.21 | — |
+| v1.0 GBM ensemble, *all rows* (as reported) | 1.21 | — |
 | Project's GBM ensemble, *honest real-target rows* | 1.42 (ridge-equivalent) | — |
 
 Read this carefully, because it is the good news: **the feature set carries real signal** — ~18–20% better than the best naive baseline, and R² ≈ 0.38–0.42 for next-season goals, which is in the normal range for this problem. The project's weakness was never the idea or the features. It was that the scoreboard was rigged, so nobody (including you) could see what was actually working.

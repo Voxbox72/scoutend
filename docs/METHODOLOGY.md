@@ -135,7 +135,7 @@ One row per `(player_id, season)`. The source has 693 player-seasons with **two
 rows**  a January transfer gives a player a row per club. The old pipeline used
 `groupby('player').shift(-1)` for the target, which for those rows produced a
 "next season" that was the *other club in the same season*: 8.5% of training
-labels pointed at the wrong season.
+labels resolved to the same season.
 
 The fix is not to drop the duplicates but to merge them correctly: **sum
 everything that is a count** (goals, minutes, passes, tackles), **take team

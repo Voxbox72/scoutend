@@ -7,7 +7,7 @@ Poisson per-90 rate models multiplied by an expected-minutes model. Projects the
 - **Evaluated on seasons:** 2021, 2022, 2023
 - **Features:** 34
 - **Python:** 3.11.1 · **card version:** 0.3.0
-- **Created:** 2026-10-30T22:23:23+00:00
+- **Created:** 2026-10-30T14:45:32+00:00
 
 ## Hyperparameters
 
