@@ -1,11 +1,11 @@
-# ScoutEnd
+﻿# ScoutEnd
 
 A football scouting system and next-season performance model for the Big 5
 European leagues: it projects how many goals and assists each outfield player
-will produce next season, explains that projection as **rate × expected
+will produce next season, explains that projection as **rate Ã— expected
 minutes**, and turns it into a scouting shortlist and player profiles.
 
-**Status:** `v1.0.0` — data layer, evaluation harness, models, scouting layer,
+**Status:** `v1.0.0` â€” data layer, evaluation harness, models, scouting layer,
 interface, tests and documentation complete. A retrospective analysis on a fixed
 archive; see the limitations at the bottom.
 
@@ -14,6 +14,7 @@ archive; see the limitations at the bottom.
 | [docs/CASE_STUDY.md](docs/CASE_STUDY.md) | The story: what was wrong with the original project, what replaced it, the results |
 | [docs/METHODOLOGY.md](docs/METHODOLOGY.md) | The mathematics: shrinkage, Poisson/Gamma GLMs, IRLS, evaluation design |
 | [REVIEW.md](REVIEW.md) | The original audit: 27 findings with reproducible evidence |
+| [notebooks/](notebooks/) | The graduation project as submitted, kept unmodified |
 | [models/](models/) | Model cards (JSON + Markdown) for every shipping model |
 
 ---
@@ -41,8 +42,8 @@ streamlit run app.py
 
 ## Why this repository exists
 
-The graduation-project notebooks are still here — historical record, and
-`Model_Playground.ipynb` holds useful exploration — but they are no longer the
+The graduation-project notebooks are still here â€” historical record, and
+`Model_Playground.ipynb` holds useful exploration â€” but they are no longer the
 pipeline. Their headline metric, *MAE 1.21 on next-season goals*, was an
 artefact: 820 of the 2,681 test rows had a target fabricated by a
 `fillna(median)` that ran after the target column was created, and a three-model
@@ -52,17 +53,17 @@ features. `REVIEW.md` documents 27 findings; `audit/` reproduces every number.
 ## The data
 
 12,515 player-season rows, 5,044 players, five leagues (EPL, La Liga, Ligue 1,
-Bundesliga, Serie A), seasons 2019/20 → 2023/24, 123 canonical columns.
+Bundesliga, Serie A), seasons 2019/20 â†’ 2023/24, 123 canonical columns.
 
 **Scope:** outfield players only. Goalkeepers are cleaned and stored as a separate
-table but excluded from features, models and evaluation — their value is
+table but excluded from features, models and evaluation â€” their value is
 shot-stopping and sweeping, not goals and assists, and a goals model applied to
 them is a category error. They are a separate phase (see the roadmap).
 
 | table | rows | grain |
 |---|---|---|
 | `player_seasons.csv.gz` | 12,515 | one row per outfield player-season, mid-season transfers merged |
-| `goalkeeper_seasons.csv.gz` | 1,027 | one row per keeper-season — data only, out of scope |
+| `goalkeeper_seasons.csv.gz` | 1,027 | one row per keeper-season â€” data only, out of scope |
 | `targets.csv.gz` | 12,515 | next-season outcomes, null where none exist |
 
 Two rules the pipeline enforces rather than hopes for:
@@ -76,18 +77,18 @@ Two rules the pipeline enforces rather than hopes for:
 ## Results
 
 Forward splits (train strictly before the test season), next-season goals,
-players with ≥450 minutes:
+players with â‰¥450 minutes:
 
-| model | MAE | R² | Spearman | top-20 |
+| model | MAE | RÂ² | Spearman | top-20 |
 |---|---|---|---|---|
 | **poisson_blended_two_stage** | **1.806** | 0.458 | 0.599 | 0.433 |
 | poisson_blended_x_actual_minutes | 1.826 | 0.457 | 0.599 | 0.450 |
 | last season's npxG *(baseline)* | 1.847 | 0.440 | 0.592 | 0.432 |
 | ridge | 1.850 | 0.466 | 0.595 | 0.433 |
 | last season's goals *(baseline)* | 2.055 | 0.279 | 0.546 | 0.467 |
-| season mean *(baseline)* | 2.547 | −0.002 | 0.000 | 0.000 |
+| season mean *(baseline)* | 2.547 | âˆ’0.002 | 0.000 | 0.000 |
 
-Assists: **1.324** against 1.422 for last season's xAG (−6.9%); goals −2.2%.
+Assists: **1.324** against 1.422 for last season's xAG (âˆ’6.9%); goals âˆ’2.2%.
 A real but modest edge over a strong naive baseline, plus a decomposition a
 single number cannot give.
 
@@ -107,7 +108,7 @@ src/scoutend/
     train.py       fit on all data, project the next season
     card.py        model cards
   eval/
-    metrics.py     MAE / RMSE / R² / Spearman / top-k / calibration
+    metrics.py     MAE / RMSE / RÂ² / Spearman / top-k / calibration
     harness.py     forward splits, scoring, report, cards
   scouting.py      percentiles, role clusters, similarity, shortlist scoring
   obsolete/        the original numpy estimators, kept as reference
@@ -124,7 +125,7 @@ evaluates and uploads the report, so the README numbers cannot silently drift.
 
 ## Limitations
 
-A retrospective analysis on a fixed archive. **The data stops at 2023/24** —
+A retrospective analysis on a fixed archive. **The data stops at 2023/24** â€”
 FBref now sits behind a challenge that refuses programmatic requests, so there is
 no live feed. The pipeline is source-agnostic (a new source needs a `schema.py`
 mapping, not a rewrite), but that work is not done. Also: Big 5 only; ~1,700 rows
@@ -132,7 +133,7 @@ per fold, so small differences are within noise; players who leave the Big 5 are
 dropped; no uncertainty intervals; and next-season goals are a proxy for value
 that ignores defensive contribution and price.
 
-Full list: [docs/CASE_STUDY.md](docs/CASE_STUDY.md) §6.
+Full list: [docs/CASE_STUDY.md](docs/CASE_STUDY.md) Â§6.
 
 ## Roadmap
 
@@ -151,3 +152,4 @@ Full list: [docs/CASE_STUDY.md](docs/CASE_STUDY.md) §6.
 Source: [FBref](https://fbref.com) via [`soccerdata`](https://github.com/probberechts/soccerdata),
 collected for the graduation project. FBref data is subject to FBref's terms of
 use; this project is for personal/educational use.
+
